@@ -1,7 +1,210 @@
 ---
-title: "RepData_PeerAssessment2"
+title: "Major Weather Events in United States (U.S): Public Health and Economic Consequences"
 author: "Muhammad Hafiz Hasan"
 date: "October 25, 2015"
 output: html_document
 ---
 
+### Synopsis
+This report uses the U.S National Oceanic and Atmospheric Administration (NOAA) storm database in order to examine the impact of severe weather events on health and the economy. The data studied covers the period 1995 to 2011 as we identified it as the completed recorded dataset. Excessive heat and tornados has the major impact to public health that causes fatalities and injuries. Mean while, flood and drought events has major economic impact.
+
+### Technical Environment
+```
+R version 3.2.0 (2015-04-16)
+Platform: x86_64-apple-darwin13.4.0 (64-bit)
+Running under: OS X 10.10.5 (Yosemite)
+```
+
+### References
+1. [NOAA storm data source](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2)
+2. [National Weather Service Storm Data Documentation](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf)
+3. [National Climatic Data Center Storm Events FAQ](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2FNCDC%20Storm%20Events-FAQ%20Page.pdf)
+
+### Data Processing
+
+Set global options
+```{r global-options}
+options(scipen =  1)  # Turn off scientific notations for numbers
+echo = TRUE           # Print out all code chunks
+```
+
+Load required packages
+```{r req-packages, message=FALSE}
+library(plyr)
+library(ggplot2)
+```
+
+Download storm data source
+```{r get-data}
+url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+if(!file.exists("repdata_data_stormdata.csv.bz2")) {
+ download.file(url, destfile = "repdata_data_stormdata.csv.bz2", method = "wget") 
+}
+data.storm <- read.csv("repdata_data_stormdata.csv.bz2")
+dim(data.storm)
+```
+There are ```902297``` observations and ```37``` variables from this data set.  
+
+Generate histogram to identify which years have better events recorded and more completed.
+```{r histogram}
+data.storm$YEAR <- as.numeric(
+  format(as.Date(data.storm$BGN_DATE, format = "%m/%d/%Y %H:%M:%S"), "%Y")
+  )
+
+hist(data.storm$YEAR, breaks = 60, xlab = "Year", main = "Histogram of NOAA data")
+```
+
+Based on generated histogram, we can see that more events recorded from 1995 to 2011 period. We can assume that good records are ranging from 1995 to 2011.  
+
+So we will be subsetting our record for this period.
+
+```{r subsetting-year}
+data.good <- data.storm[data.storm$YEAR >= 1995, ]
+dim(data.good)
+```
+
+So, our next analysis will be based on ```681500``` observations with ```38``` variables.  
+
+Then we reduce our variables into smaller subset as below:  
+- EVTYPE : Weather even type  
+- FATALITIES : Fatalities to human health  
+- INJURIES : Injuries to human health  
+- PROPDMG : Property damage  
+- PROPDMGEXP : Property damage magnitude  
+- CROPDMG : Crop damage  
+- CROPDMGEXP : Crop damage magnitude
+
+```{r subsetting-variables}
+cols <- c("EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP")
+data.analysis <- data.good[cols]
+```
+
+Get available magnitude value for property damage
+
+```{r propdmgexp}
+unique(data.analysis$PROPDMGEXP)
+```
+
+Convert magnitude value for property damage
+
+```{r}
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "B"] <- 1e+09
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "M"] <- 1e+06
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "K"] <- 1000
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "m"] <- 1e+06
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "+"] <- 0
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "0"] <- 1
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "5"] <- 1e+05
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "6"] <- 1e+06
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "?"] <- 0
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "4"] <- 1e+04
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "2"] <- 1e+02
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "3"] <- 1e+03
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "7"] <- 1e+07
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "H"] <- 1e+02
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "-"] <- 0
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "1"] <- 1e+01
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "8"] <- 1e+08
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == "h"] <- 1e+02
+data.analysis$PROPEXPVAL[data.analysis$PROPDMGEXP == " "] <- 1
+```
+
+Compute property damage value
+
+```{r}
+data.analysis$PROPDMGVAL <- data.analysis$PROPDMG * data.analysis$PROPEXPVAL
+```
+
+Get available magnitude value for crop damage
+
+```{r cropdmgexp}
+unique(data.analysis$CROPDMGEXP)
+```
+
+Convert magnitude value for crop damage
+
+```{r}
+data.analysis$CROPEXPVAL[data.analysis$CROPDMGEXP == "M"] <- 1e+06
+data.analysis$CROPEXPVAL[data.analysis$CROPDMGEXP == "m"] <- 1e+06
+data.analysis$CROPEXPVAL[data.analysis$CROPDMGEXP == "K"] <- 1e+03
+data.analysis$CROPEXPVAL[data.analysis$CROPDMGEXP == "B"] <- 1e+09
+data.analysis$CROPEXPVAL[data.analysis$CROPDMGEXP == "?"] <- 0
+data.analysis$CROPEXPVAL[data.analysis$CROPDMGEXP == "0"] <- 1
+data.analysis$CROPEXPVAL[data.analysis$CROPDMGEXP == "k"] <- 1e+03
+data.analysis$CROPEXPVAL[data.analysis$CROPDMGEXP == "2"] <- 1e+02
+data.analysis$CROPEXPVAL[data.analysis$CROPDMGEXP == " "] <- 1
+```
+
+Compute crop damage value
+
+```{r}
+data.analysis$CROPDMGVAL <- data.analysis$CROPDMG * data.analysis$CROPEXPVAL
+```
+
+Aggregate data based on weather event type
+
+```{r aggregate-by-event}
+agg.fatalities <- aggregate(FATALITIES ~ EVTYPE, data = data.analysis, sum)
+agg.injuries <- aggregate(INJURIES ~ EVTYPE, data = data.analysis, sum)
+agg.prop.dmg <- aggregate(PROPDMGVAL ~ EVTYPE, data = data.analysis, sum)
+agg.crop.dmg <- aggregate(CROPDMGVAL ~ EVTYPE, data = data.analysis, sum)
+```
+
+### Results
+
+**Population Health**
+Identify which types of weather events are most harmful with respect to population health (fatalities and injuries) across U.S
+
+Generate graph to identity top 20 weather events that cause fatalities
+
+```{r graph-fatalities}
+top.fatalities <- agg.fatalities[order(-agg.fatalities$FATALITIES), ][1:20, ]
+
+par(las = 2, mar = c(15, 7, 2, 2), mgp = c(5, 2, 0), cex = 0.7)
+barplot(top.fatalities$FATALITIES, names.arg = top.fatalities$EVTYPE, 
+        main = "Top 20 Weather Events With Highest Fatalities",
+        ylab = "No of Fatalities")
+```
+
+As we can see, most fatalities caused by excessive heat event.
+
+Generate graph to identity top 20 weather events that cause injuries
+
+```{r graph-injuries}
+top.injuries <- agg.injuries[order(-agg.injuries$INJURIES), ][1:20, ]
+
+par(las = 2, mar = c(15, 7, 2, 2), mgp = c(5, 2, 0), cex = 0.7)
+barplot(top.injuries$INJURIES, names.arg = top.injuries$EVTYPE, 
+        main = "Top 20 Weather Events With Highest Injuries",
+        ylab = "No of Injuries")
+```
+
+As we can see, most injuries caused by tornado event.
+
+**Economic**
+Generate graph to identify top 20 events that have greatest economic consequences for properties
+
+```{r graph-eco-prop}
+top.prop <- agg.prop.dmg[order(-agg.prop.dmg$PROPDMGVAL), ][1:20, ]
+
+par(las = 2, mar = c(15, 7, 2, 2), mgp = c(5, 2, 0), cex = 0.7)
+barplot(top.prop$PROPDMGVAL/(10^9), names.arg = top.prop$EVTYPE, 
+        main = "Top 20 Weather Events With Greatest Economic Consequences (Properties)",
+        ylab = "Cost of damage ($ Billions)")
+```
+
+Generate graph to identify top 20 events that have greatest economic consequences for crops
+
+```{r graph-eco-crop}
+top.crop <- agg.crop.dmg[order(-agg.crop.dmg$CROPDMGVAL), ][1:20, ]
+
+par(las = 2, mar = c(15, 7, 2, 2), mgp = c(5, 2, 0), cex = 0.7)
+barplot(top.crop$CROPDMGVAL/(10^9), names.arg = top.crop$EVTYPE, 
+        main = "Top 20 Weather Events With Greatest Economic Consequences (Crops)",
+        ylab = "Cost of damage ($ Billions)")
+```
+
+As we can see, flood have the greatest economic consequences for properties while drought give major impact to crops.
+
+### Conclusion
+From these data, we can conclude that **excessive heat** and **tornado** have cause most harmful to population across U.S; while **flood** and **drought** have the greatest economic impact for properties and crops.
